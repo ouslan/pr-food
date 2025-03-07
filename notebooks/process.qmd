@@ -1,0 +1,72 @@
+---
+title: "food deserts"
+format:
+  html:
+    code-fold: true
+jupyter: python3
+---
+
+```{python}
+import os
+os.chdir("..")
+```
+
+
+```{python}
+import polars as pl
+import geopandas as gpd
+from src.data.data_process import foodDeseart
+from shapely import wkt
+dc = foodDeseart()
+```
+
+```{python}
+dc.make_spatial_table()
+```
+
+```{python}
+df = main
+codes = ["4451", "44511", "445110", "44513", "445131", "445132", 
+                 "4452", "44523", "445230", "44524", "445240", "445240", 
+                 "44525", "445250", "44529", "445291", "445292", "445298",
+                  "4551", "45511", "455110", "4552", "45521", "455211", "455219"]
+df = df.select(pl.col("year", "qtr", "ein", "leg_corp_name", 
+                                     "phys_addr_5_zip", "naics_code", "first_month_employment",
+                                     "second_month_employment", "third_month_employment", "total_wages", "taxable_wages"))
+                              
+df = df.with_columns(
+    zipcode=pl.col("phys_addr_5_zip").cast(pl.String).str.zfill(5),
+    naics4=pl.col("naics_code").str.slice(0, 4),
+    dummy=pl.lit(1)
+    )
+df = df.filter(pl.col("phys_addr_5_zip") != "")
+df = df.filter(pl.col("naics_code") != "")
+df = df.filter(pl.col("naics4").is_in(codes))
+df.group_by(["year","qtr","naics4","zipcode"]).agg(
+    buisnesses=pl.col("dummy").sum()
+)
+```
+
+```{python}
+gdf = gpd.read_file("data/external/zips_shape.zip", engine="pyogrio")
+gdf = gdf.to_crs("EPSG:4326")
+gdf = gdf.rename(columns={"ZCTA5CE20": "zipcode"})
+gdf = gdf[gdf["zipcode"].astype(int) < 999].reset_index()
+gdf = gdf[["zipcode","geometry"]]
+df = gdf.drop(columns="geometry")
+geometry = gdf["geometry"].apply(lambda geom: geom.wkt)
+df["geometry"] = geometry
+df["zipcode"] = df["zipcode"].astype(str).str.zfill(5)
+df
+```
+
+```{python}
+dc.conn.execute("CREATE TABLE zipstable AS SELECT * FROM df")
+```
+
+```{python}
+gdf = dc.conn.sql("SELECT * FROM 'zipstable';").df()
+gdf["       c"] = gdf["geometry"].apply(wkt.loads)
+gdf = gdf.set_geometry("geometry")
+gdf.plot()
+```
