@@ -8,7 +8,7 @@ from shapely import wkt
 from ..jp_qcew.src.data.data_process import cleanData
 
 
-class foodDeseart(cleanData):
+class FoodDeseart(cleanData):
     def __init__(
         self,
         saving_dir: str = "data/",
@@ -134,9 +134,9 @@ class foodDeseart(cleanData):
             gdf = gdf.set_geometry("geometry")
             return gdf
 
-    def gen_food_graph(self, var: str, year: int, qrt: int, title: str):
+    def gen_food_graph(self, var: str, year: int, qtr: int, title: str):
         # define data
-        df = self.food_data(year=year, qtr=qrt)
+        df = self.food_data(year=year, qtr=qtr)
 
         # define choropleth scale
         quant = df[var]
