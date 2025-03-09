@@ -1,0 +1,55 @@
+---
+title: "food deserts"
+format:
+  html:
+    code-fold: true
+jupyter: python3
+---
+
+```{python}
+import os
+os.chdir("..")
+```
+
+
+```{python}
+import polars as pl
+import geopandas as gpd
+import altair as alt
+from src.data.data_process import foodDeseart
+from shapely import wkt
+dc = foodDeseart()
+```
+
+```{python}
+dc.gen_food_graph(year=2020,qrt=1,title="something", var="total_food_area")
+```
+
+```{python}
+year = 2020
+qtr = 1
+df = dc.buiss_data(year,qtr
+df 
+```
+
+```{python}
+var = "total_food_area"
+quant = df[var]
+domain = [0, quant.quantile(.25), quant.quantile(.50), quant.quantile(.75), quant.max()]
+alt.Chart(df).mark_geoshape().encode(
+    color=alt.Color(f'{var}:Q', scale=alt.Scale(domain=domain, scheme="viridis")
+    )
+    
+).transform_lookup(
+    lookup='zipcode',
+    from_=alt.LookupData(df, 'zipcode', ['rate'])
+).project(
+    type='mercator'
+).properties(
+    width="container",
+    height=300
+)
+```
+
+```{python}
+
