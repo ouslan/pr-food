@@ -21,18 +21,18 @@ dc = foodDeseart()
 ```
 
 ```{python}
-dc.make_spatial_table()
+gdf =  dc.make_spatial_table()
+df = dc.buiss_data(2020, 1)
 ```
 
 ```{python}
-df = main
+df = dc.conn.sql(f"SELECT * FROM 'qcewtable' WHERE year = {year} AND qtr = {qtr};").pl()
 codes = ["4451", "44511", "445110", "44513", "445131", "445132", 
                  "4452", "44523", "445230", "44524", "445240", "445240", 
                  "44525", "445250", "44529", "445291", "445292", "445298",
                   "4551", "45511", "455110", "4552", "45521", "455211", "455219"]
-df = df.select(pl.col("year", "qtr", "ein", "leg_corp_name", 
-                                     "phys_addr_5_zip", "naics_code", "first_month_employment",
-                                     "second_month_employment", "third_month_employment", "total_wages", "taxable_wages"))
+df = df.select(pl.col("year", "qtr",
+                                     "phys_addr_5_zip", "naics_code"))
                               
 df = df.with_columns(
     zipcode=pl.col("phys_addr_5_zip").cast(pl.String).str.zfill(5),
@@ -41,7 +41,7 @@ df = df.with_columns(
     )
 df = df.filter(pl.col("phys_addr_5_zip") != "")
 df = df.filter(pl.col("naics_code") != "")
-df = df.filter(pl.col("naics4").is_in(codes))
+df = df.filter(pl.col("naics4").s
 df.group_by(["year","qtr","naics4","zipcode"]).agg(
     buisnesses=pl.col("dummy").sum()
 )
@@ -61,12 +61,36 @@ df
 ```
 
 ```{python}
-dc.conn.execute("CREATE TABLE zipstable AS SELECT * FROM df")
+year = 2020
+qtr = 1
+df = dc.buiss_data(year,qtr)
+df["area"] = df.area
+df
 ```
 
 ```{python}
-gdf = dc.conn.sql("SELECT * FROM 'zipstable';").df()
-gdf["       c"] = gdf["geometry"].apply(wkt.loads)
-gdf = gdf.set_geometry("geometry")
-gdf.plot()
+926140
+445110
+codes = ["445110", "445131", "445132", 
+         "445230", "445240", "445250", "445291", "445292", "445298",
+          "455110", "455211", "455219"]
+
+empty_df = pl.DataFrame([
+            pl.Series("year", [], dtype=pl.Int64),
+            pl.Series("qtr", [], dtype=pl.Int64),
+            pl.Series("phys_addr_5_zip", [], dtype=pl.String),
+            pl.Series("naics_code", [], dtype=pl.String),
+        ])
+
+year = 2020
+qtr = 1
+df = dc.conn.sql(
+    f"""
+    SELECT year,qtr,phys_addr_5_zip,naics_code FROM 'qcewtable' 
+        WHERE year = {year} AND qtr = {qtr};
+    """
+    ).pl()
+for co
 ```
+
+

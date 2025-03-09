@@ -5,7 +5,6 @@ import logging
 import geopandas as gpd
 from shapely import wkt
 from ..jp_qcew.src.data.data_process import cleanData
-from ..models import init_zipstable
 
 
 class foodDeseart(cleanData):
@@ -17,43 +16,15 @@ class foodDeseart(cleanData):
     ):
         super().__init__(saving_dir, database_file, log_file)
 
-    def buiss_data(self, year: int) -> gpd.GeoDataFrame:
-        df = self.conn.sql(f"SELECT * FROM 'qcewtable' WHERE year = {year};").pl()
-        codes = [
-            "4451",
-            "44511",
-            "445110",
-            "44513",
-            "445131",
-            "445132",
-            "4452",
-            "44523",
-            "445230",
-            "44524",
-            "445240",
-            "445240",
-            "44525",
-            "445250",
-            "44529",
-            "445291",
-            "445292",
-            "445298",
-            "4551",
-            "45511",
-            "455110",
-            "4552",
-            "45521",
-            "455211",
-            "455219",
-        ]
-        df = df.select(
-            pl.col(
-                "year",
-                "qtr",
-                "phys_addr_5_zip",
-                "naics_code",
-            )
-        )
+    def buiss_data(self, year: int, qtr: int) -> gpd.GeoDataFrame:
+        if "qcewtable" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
+            self.make_qcew_dataset()
+        df = self.conn.sql(
+            f"""
+            SELECT year,qtr,phys_addr_5_zip,naics_code FROM 'qcewtable' 
+                WHERE year = {year} AND qtr = {qtr};
+             """
+        ).pl()
 
         df = df.with_columns(
             zipcode=pl.col("phys_addr_5_zip").cast(pl.String).str.zfill(5),
@@ -61,20 +32,31 @@ class foodDeseart(cleanData):
             dummy=pl.lit(1),
         )
         df = df.filter(pl.col("phys_addr_5_zip") != "")
-        df = df.filter(pl.col("naics_code") != "")
-        df = df.filter(pl.col("naics4").is_in(codes))
+        df = df.bottom_kwith_columns(
+                                        pl.col("phys_addr_5_zip").cast(pl.String).str.zfill(5).alias("zipcode"),
+                                      ((pl.col("first_month_employment") + pl.col("second_month_employment") + pl.col("third_month_employment"))/3).alias("total_employment"),
+                                        pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("4451")).then(1).otherwise(0).alias("supermarkets_and_others"),
+                                        pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("44511")).then(1).otherwise(0).alias("supermarkets"),
+                                        pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("44513")).then(1).otherwise(0).alias("convenience_retailers"),
+                                        pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("4452")).then(1).otherwise(0).alias("whole_foods"),
+                                        pl.when(pl.col("ein").cast(pl.String).str.starts_with("911223280")).then(1).otherwise(0).alias("costco"),
+                                        pl.when(pl.col("ein").cast(pl.String).str.starts_with("660475164")).then(1).otherwise(0).alias("walmart"))
+
+
         df = df.group_by(["year", "qtr", "naics4", "zipcode"]).agg(
             buisnesses=pl.col("dummy").sum()
         )
-        gdf = gpd.read_file(
-            f"{self.saving_dir}external/zips_shape.zip", engine="pyogrio"
-        )
-        gdf = gdf.to_crs("EPSG:4326")
-        gdf = gdf.rename(columns={"ZCTA5CE20": "zipcode"})
-        gdf = gdf[gdf["zipcode"].astype(int) < 999].reset_index()
-        gdf = gdf[["zipcode", "geometry"]]
+        gdf = self.make_spatial_table()
 
-        gdf = gdf.join(df.to_pandas(), on="zipcode", how="inner")
+        gdf = gdf.join(
+            df.to_pandas().set_index("zipcode"),
+            on="zipcode",
+            how="inner",
+            validate="1:m",
+        )
+        gdf = gpd.GeoDataFrame(gdf, geometry="geometry")
+
+        gdf["buis_area"] = gdf["buisnesses"] / gdf.area
 
         return gdf
 
