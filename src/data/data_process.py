@@ -2,6 +2,7 @@ import polars as pl
 import requests
 import os
 import logging
+import altair as alt
 import geopandas as gpd
 from shapely import wkt
 from ..jp_qcew.src.data.data_process import cleanData
@@ -16,35 +17,53 @@ class foodDeseart(cleanData):
     ):
         super().__init__(saving_dir, database_file, log_file)
 
-    def buiss_data(self, year: int, qtr: int) -> gpd.GeoDataFrame:
+    def food_data(self, year: int, qtr: int) -> gpd.GeoDataFrame:
         if "qcewtable" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
             self.make_qcew_dataset()
         df = self.conn.sql(
             f"""
-            SELECT year,qtr,phys_addr_5_zip,naics_code FROM 'qcewtable' 
+            SELECT year,qtr,phys_addr_5_zip,naics_code,ein FROM 'qcewtable' 
                 WHERE year = {year} AND qtr = {qtr};
              """
         ).pl()
+        df = df.filter(pl.col("phys_addr_5_zip") != "")
+        df = df.with_columns(
+            pl.col("phys_addr_5_zip").cast(pl.String).str.zfill(5).alias("zipcode"),
+            pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("4451"))
+            .then(1)
+            .otherwise(0)
+            .alias("supermarkets_and_others"),
+            pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("44511"))
+            .then(1)
+            .otherwise(0)
+            .alias("supermarkets"),
+            pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("44513"))
+            .then(1)
+            .otherwise(0)
+            .alias("convenience_retailers"),
+            pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("4452"))
+            .then(1)
+            .otherwise(0)
+            .alias("whole_foods"),
+            pl.when(pl.col("ein").cast(pl.String).str.starts_with("911223280"))
+            .then(1)
+            .otherwise(0)
+            .alias("costco"),
+            pl.when(pl.col("ein").cast(pl.String).str.starts_with("660475164"))
+            .then(1)
+            .otherwise(0)
+            .alias("walmart"),
+        )
+
+        df = df.group_by(["year", "qtr", "zipcode"]).agg(
+            supermarkets_and_others=pl.col("supermarkets_and_others").sum(),
+            supermarkets=pl.col("supermarkets").sum(),
+            convenience_retailers=pl.col("convenience_retailers").sum(),
+            whole_foods=pl.col("whole_foods").sum(),
+        )
 
         df = df.with_columns(
-            zipcode=pl.col("phys_addr_5_zip").cast(pl.String).str.zfill(5),
-            naics4=pl.col("naics_code").str.slice(0, 4),
-            dummy=pl.lit(1),
-        )
-        df = df.filter(pl.col("phys_addr_5_zip") != "")
-        df = df.bottom_kwith_columns(
-                                        pl.col("phys_addr_5_zip").cast(pl.String).str.zfill(5).alias("zipcode"),
-                                      ((pl.col("first_month_employment") + pl.col("second_month_employment") + pl.col("third_month_employment"))/3).alias("total_employment"),
-                                        pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("4451")).then(1).otherwise(0).alias("supermarkets_and_others"),
-                                        pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("44511")).then(1).otherwise(0).alias("supermarkets"),
-                                        pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("44513")).then(1).otherwise(0).alias("convenience_retailers"),
-                                        pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("4452")).then(1).otherwise(0).alias("whole_foods"),
-                                        pl.when(pl.col("ein").cast(pl.String).str.starts_with("911223280")).then(1).otherwise(0).alias("costco"),
-                                        pl.when(pl.col("ein").cast(pl.String).str.starts_with("660475164")).then(1).otherwise(0).alias("walmart"))
-
-
-        df = df.group_by(["year", "qtr", "naics4", "zipcode"]).agg(
-            buisnesses=pl.col("dummy").sum()
+            total_food=pl.col("supermarkets") + pl.col("convenience_retailers")
         )
         gdf = self.make_spatial_table()
 
@@ -52,11 +71,18 @@ class foodDeseart(cleanData):
             df.to_pandas().set_index("zipcode"),
             on="zipcode",
             how="inner",
-            validate="1:m",
+            validate="1:1",
         )
         gdf = gpd.GeoDataFrame(gdf, geometry="geometry")
-
-        gdf["buis_area"] = gdf["buisnesses"] / gdf.area
+        gdf["supermarkets_and_others_area"] = gdf["supermarkets_and_others"] / (
+            gdf.area * 1000
+        )
+        gdf["supermarkets_area"] = gdf["supermarkets"] / (gdf.area * 1000)
+        gdf["convenience_retailers_area"] = gdf["convenience_retailers"] / (
+            gdf.area * 1000
+        )
+        gdf["whole_foods_area"] = gdf["whole_foods"] / (gdf.area * 1000)
+        gdf["total_food_area"] = gdf["total_food"] / (gdf.area * 1000)
 
         return gdf
 
@@ -107,3 +133,38 @@ class foodDeseart(cleanData):
             gdf["geometry"] = gdf["geometry"].apply(wkt.loads)
             gdf = gdf.set_geometry("geometry")
             return gdf
+
+    def gen_food_graph(self, var: str, year: int, qrt: int, title: str):
+        # define data
+        df = self.food_data(year=year, qtr=qrt)
+
+        # define choropleth scale
+        quant = df[var]
+        domain = [
+            0,
+            quant.quantile(0.25),
+            quant.quantile(0.50),
+            quant.quantile(0.75),
+            quant.max(),
+        ]
+        scale = alt.Scale(domain=domain, scheme="viridis")
+        # define choropleth chart
+        choropleth = (
+            alt.Chart(df, title=title)
+            .mark_geoshape()
+            .transform_lookup(
+                lookup="zipcode",
+                from_=alt.LookupData(data=df, key="zipcode", fields=[var]),
+            )
+            .encode(
+                alt.Color(
+                    f"{var}:Q",
+                    scale=scale,
+                    legend=alt.Legend(direction="horizontal", orient="bottom"),
+                )
+            )
+            .project(type="mercator")
+            .properties(width="container", height=300)
+        )
+        return choropleth
+

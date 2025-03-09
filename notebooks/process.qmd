@@ -15,82 +15,41 @@ os.chdir("..")
 ```{python}
 import polars as pl
 import geopandas as gpd
+import altair as alt
 from src.data.data_process import foodDeseart
 from shapely import wkt
 dc = foodDeseart()
 ```
 
 ```{python}
-gdf =  dc.make_spatial_table()
-df = dc.buiss_data(2020, 1)
+dc.gen_food_graph(year=2020,qrt=1,title="something", var="total_food_area")
 ```
 
 ```{python}
-df = dc.conn.sql(f"SELECT * FROM 'qcewtable' WHERE year = {year} AND qtr = {qtr};").pl()
-codes = ["4451", "44511", "445110", "44513", "445131", "445132", 
-                 "4452", "44523", "445230", "44524", "445240", "445240", 
-                 "44525", "445250", "44529", "445291", "445292", "445298",
-                  "4551", "45511", "455110", "4552", "45521", "455211", "455219"]
-df = df.select(pl.col("year", "qtr",
-                                     "phys_addr_5_zip", "naics_code"))
-                              
-df = df.with_columns(
-    zipcode=pl.col("phys_addr_5_zip").cast(pl.String).str.zfill(5),
-    naics4=pl.col("naics_code").str.slice(0, 4),
-    dummy=pl.lit(1)
+year = 2020
+qtr = 1
+df = dc.buiss_data(year,qtr
+df 
+```
+
+```{python}
+var = "total_food_area"
+quant = df[var]
+domain = [0, quant.quantile(.25), quant.quantile(.50), quant.quantile(.75), quant.max()]
+alt.Chart(df).mark_geoshape().encode(
+    color=alt.Color(f'{var}:Q', scale=alt.Scale(domain=domain, scheme="viridis")
     )
-df = df.filter(pl.col("phys_addr_5_zip") != "")
-df = df.filter(pl.col("naics_code") != "")
-df = df.filter(pl.col("naics4").s
-df.group_by(["year","qtr","naics4","zipcode"]).agg(
-    buisnesses=pl.col("dummy").sum()
+    
+).transform_lookup(
+    lookup='zipcode',
+    from_=alt.LookupData(df, 'zipcode', ['rate'])
+).project(
+    type='mercator'
+).properties(
+    width="container",
+    height=300
 )
 ```
 
 ```{python}
-gdf = gpd.read_file("data/external/zips_shape.zip", engine="pyogrio")
-gdf = gdf.to_crs("EPSG:4326")
-gdf = gdf.rename(columns={"ZCTA5CE20": "zipcode"})
-gdf = gdf[gdf["zipcode"].astype(int) < 999].reset_index()
-gdf = gdf[["zipcode","geometry"]]
-df = gdf.drop(columns="geometry")
-geometry = gdf["geometry"].apply(lambda geom: geom.wkt)
-df["geometry"] = geometry
-df["zipcode"] = df["zipcode"].astype(str).str.zfill(5)
-df
-```
-
-```{python}
-year = 2020
-qtr = 1
-df = dc.buiss_data(year,qtr)
-df["area"] = df.area
-df
-```
-
-```{python}
-926140
-445110
-codes = ["445110", "445131", "445132", 
-         "445230", "445240", "445250", "445291", "445292", "445298",
-          "455110", "455211", "455219"]
-
-empty_df = pl.DataFrame([
-            pl.Series("year", [], dtype=pl.Int64),
-            pl.Series("qtr", [], dtype=pl.Int64),
-            pl.Series("phys_addr_5_zip", [], dtype=pl.String),
-            pl.Series("naics_code", [], dtype=pl.String),
-        ])
-
-year = 2020
-qtr = 1
-df = dc.conn.sql(
-    f"""
-    SELECT year,qtr,phys_addr_5_zip,naics_code FROM 'qcewtable' 
-        WHERE year = {year} AND qtr = {qtr};
-    """
-    ).pl()
-for co
-```
-
 
