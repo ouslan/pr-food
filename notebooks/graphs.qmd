@@ -1,0 +1,30 @@
+---
+title: "food deserts"
+format:
+  html:
+    code-fold: true
+jupyter: python3
+---
+
+```{python}
+import os
+os.chdir("..")
+```
+
+```{python}
+import polars as pl
+import geopandas as gpd
+import altair as alt
+from src.data.data_process import FoodDeseart
+from shapely import wkt
+dc = FoodDeseart()
+```
+
+```{python}
+dc.gen_food_graph(year=2020,qtr=1,title="something", var="total_food_area")
+```
+
+```{python}
+["supermarkets_area", "convenience_retailers_area", "whole_foods_area", "total_food_area"]
+dc.food_data(year=2021,qtr=1)
+```

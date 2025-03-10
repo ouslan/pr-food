@@ -16,19 +16,19 @@ os.chdir("..")
 import polars as pl
 import geopandas as gpd
 import altair as alt
-from src.data.data_process import foodDeseart
+from src.data.data_process import FoodDeseart
 from shapely import wkt
-dc = foodDeseart()
+dc = FoodDeseart()
 ```
 
 ```{python}
-dc.gen_food_graph(year=2020,qrt=1,title="something", var="total_food_area")
+dc.gen_food_graph(year=2020,qtr=1,title="something", var="total_food_area")
 ```
 
 ```{python}
 year = 2020
 qtr = 1
-df = dc.buiss_data(year,qtr
+df = dc.food_data(year=year, qtr=qtr)
 df 
 ```
 
