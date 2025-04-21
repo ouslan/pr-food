@@ -45,6 +45,14 @@ class FoodDeseart(cleanData):
             .then(1)
             .otherwise(0)
             .alias("whole_foods"),
+            pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("23"))
+            .then(1)
+            .otherwise(0)
+            .alias("construction"),
+            pl.when(pl.col("naics_code").cast(pl.String).str.starts_with("52"))
+            .then(1)
+            .otherwise(0)
+            .alias("finance"),
             pl.when(pl.col("ein").cast(pl.String).str.starts_with("911223280"))
             .then(1)
             .otherwise(0)
@@ -60,6 +68,8 @@ class FoodDeseart(cleanData):
             supermarkets=pl.col("supermarkets").sum(),
             convenience_retailers=pl.col("convenience_retailers").sum(),
             whole_foods=pl.col("whole_foods").sum(),
+            construction=pl.col("construction").sum(),
+            finance=pl.col("finance").sum(),
         )
 
         df = df.with_columns(
@@ -83,6 +93,8 @@ class FoodDeseart(cleanData):
         )
         gdf["whole_foods_area"] = gdf["whole_foods"] / (gdf.area * 1000)
         gdf["total_food_area"] = gdf["total_food"] / (gdf.area * 1000)
+        gdf["construction_area"] = gdf["construction"] / (gdf.area * 1000)
+        gdf["finance_area"] = gdf["finance"] / (gdf.area * 1000)
 
         return gdf
 
@@ -167,4 +179,3 @@ class FoodDeseart(cleanData):
             .properties(width="container", height=300)
         )
         return choropleth
-
