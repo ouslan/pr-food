@@ -1,8 +1,7 @@
 import logging
 import os
 from datetime import datetime
-import re
-
+from shapely import wkt
 import altair as alt
 import geopandas as gpd
 import polars as pl
@@ -78,14 +77,22 @@ class FoodDeseart(cleanData):
         df = df.with_columns(
             total_food=pl.col("supermarkets") + pl.col("convenience_retailers")
         )
-        gdf = self.make_spatial_table()
+        gdf = self.spatial_data()
 
         gdf = gdf.join(
             df.to_pandas().set_index("zipcode"),
             on="zipcode",
             how="inner",
-            validate="1:1",
+            validate="1:m",
         )
+        death_df = self.process_death()
+        gdf = gdf.merge(
+            death_df.to_pandas(),
+            on=["zipcode", "qtr", "year"],
+            how="inner",
+            validate="m:m",
+        )
+        gdf = gdf.reset_index(drop=True)
         gdf = gpd.GeoDataFrame(gdf, geometry="geometry")
         gdf["supermarkets_and_others_area"] = gdf["supermarkets_and_others"] / (
             gdf.area * 1000
@@ -101,11 +108,37 @@ class FoodDeseart(cleanData):
 
         return gdf
 
+    def process_death(self) -> pl.DataFrame:
+        df = self.pull_death()
+        df = df.with_columns(
+            qtr=pl.when(
+                (pl.col("deathdate_month") > 0) & (pl.col("deathdate_month") <= 3)
+            )
+            .then(1)
+            .when((pl.col("deathdate_month") > 3) & (pl.col("deathdate_month") <= 6))
+            .then(2)
+            .when((pl.col("deathdate_month") > 6) & (pl.col("deathdate_month") <= 9))
+            .then(3)
+            .when((pl.col("deathdate_month") > 9) & (pl.col("deathdate_month") <= 12))
+            .then(4)
+            .otherwise(None)
+        ).drop("deathdate_month")
+        df = df.rename({"deathdate_year": "year"})
+        df = df.group_by("year", "qtr", "zipcode").agg(
+            pl.col("death_a").sum().alias("paracites_disease"),
+            pl.col("death_c").sum().alias("cancer_disease"),
+            pl.col("death_g").sum().alias("nervous_disease"),
+            pl.col("death_j").sum().alias("respiratory_disease"),
+            pl.col("death_i").sum().alias("circulatory_disease"),
+        )
+        return df
+
     def pull_death(self) -> pl.DataFrame:
         if "DeathTable" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
             init_death_table(self.data_file)
             df = pd.read_stata(f"{self.saving_dir}external/deaths.dta")
             df = df[~df["zipcode"].isna()].reset_index(drop=True)
+            df = df[df["deathdate_month"] <= 12].reset_index(drop=True)
             df["zipcode"] = df["zipcode"].astype(int).astype(str).str.zfill(5)
             self.conn.sql("INSERT INTO 'DeathTable' BY NAME SELECT * FROM df")
             logging.info(f"succesfully inserting DeathTable")
@@ -154,7 +187,17 @@ class FoodDeseart(cleanData):
             logging.info(
                 f"The zipstable is empty inserting {self.saving_dir}external/cousub.zip"
             )
-        return self.conn.sql("SELECT * FROM zipstable;")
+            return self.conn.sql("SELECT * FROM zipstable;")
+        else:
+            return self.conn.sql("SELECT * FROM zipstable;")
+
+    def spatial_data(self) -> gpd.GeoDataFrame:
+        gdf = gpd.GeoDataFrame(self.make_spatial_table().df())
+        gdf["geometry"] = gdf["geometry"].apply(wkt.loads)
+        gdf = gdf.set_geometry("geometry").set_crs("EPSG:4269", allow_override=True)
+        gdf = gdf.to_crs("EPSG:3395")
+        gdf["zipcode"] = gdf["zipcode"].astype(str)
+        return gdf
 
     def pull_dp03(self) -> pl.DataFrame:
         if "DP03Table" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
