@@ -41,3 +41,41 @@ def init_dp03_table(db_path: str) -> None:
             );
         """
     )
+
+
+def init_death_table(db_path: str) -> None:
+    conn = get_conn(db_path=db_path)
+
+    conn.sql(
+        """
+        CREATE TABLE IF NOT EXISTS DeathTable (
+            deathdate_year INTEGER,
+            deathdate_month INTEGER,
+            zipcode VARCHAR(5),
+            death_a INTEGER,
+            death_b INTEGER,
+            death_c INTEGER,
+            death_d INTEGER,
+            death_e INTEGER,
+            death_f INTEGER,
+            death_g INTEGER,
+            death_h INTEGER,
+            death_i INTEGER,
+            death_j INTEGER,
+            death_k INTEGER,
+            death_l INTEGER,
+            death_m INTEGER,
+            death_n INTEGER,
+            death_o INTEGER,
+            death_p INTEGER,
+            death_q INTEGER,
+            death_r INTEGER,
+            death_s INTEGER,
+            death_t INTEGER,
+            death_u INTEGER,
+            death_v INTEGER,
+            death_w INTEGER,
+            muertes INTEGER
+        );
+        """
+    )

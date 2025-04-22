@@ -1,13 +1,15 @@
 import logging
 import os
 from datetime import datetime
+import re
 
 import altair as alt
 import geopandas as gpd
 import polars as pl
+import pandas as pd
 import requests
 from ..jp_qcew.src.data.data_process import cleanData
-from ..models import init_dp03_table
+from ..models import init_dp03_table, init_death_table
 
 
 class FoodDeseart(cleanData):
@@ -98,6 +100,18 @@ class FoodDeseart(cleanData):
         gdf["finance_area"] = gdf["finance"] / (gdf.area * 1000)
 
         return gdf
+
+    def pull_death(self) -> pl.DataFrame:
+        if "DeathTable" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
+            init_death_table(self.data_file)
+            df = pd.read_stata(f"{self.saving_dir}external/deaths.dta")
+            df = df[~df["zipcode"].isna()].reset_index(drop=True)
+            df["zipcode"] = df["zipcode"].astype(int).astype(str).str.zfill(5)
+            self.conn.sql("INSERT INTO 'DeathTable' BY NAME SELECT * FROM df")
+            logging.info(f"succesfully inserting DeathTable")
+            return self.conn.sql("SELECT * FROM 'DeathTable';").pl()
+        else:
+            return self.conn.sql("SELECT * FROM 'DeathTable';").pl()
 
     def pull_query(self, params: list, year: int) -> pl.DataFrame:
         # prepare custom census query
