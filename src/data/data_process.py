@@ -85,13 +85,13 @@ class FoodDeseart(cleanData):
             how="inner",
             validate="1:m",
         )
-        death_df = self.process_death()
-        gdf = gdf.merge(
-            death_df.to_pandas(),
-            on=["zipcode", "qtr", "year"],
-            how="inner",
-            validate="m:m",
-        )
+        # death_df = self.process_death()
+        # gdf = gdf.merge(
+        #     death_df.to_pandas(),
+        #     on=["zipcode", "qtr", "year"],
+        #     how="inner",
+        #     validate="m:m",
+        # )
         gdf = gdf.reset_index(drop=True)
         gdf = gpd.GeoDataFrame(gdf, geometry="geometry")
         gdf["supermarkets_and_others_area"] = gdf["supermarkets_and_others"] / (
@@ -152,6 +152,7 @@ class FoodDeseart(cleanData):
         base = "https://api.census.gov/data/"
         flow = "/acs/acs5/profile"
         url = f"{base}{year}{flow}?get={param}&for=zip%20code%20tabulation%20area:*&in=state:72"
+        logging.debug(url)
         df = pl.DataFrame(requests.get(url).json())
 
         # get names from DataFrame
@@ -210,9 +211,17 @@ class FoodDeseart(cleanData):
             ):
                 try:
                     logging.info(f"pulling {_year} data")
-                    tmp = self.pull_query(
+                    df = self.pull_query(
                         params=[
                             "DP03_0001E",
+                            "DP03_0003E",
+                            "DP03_0004E",
+                            "DP03_0005E",
+                            "DP03_0006E",
+                            "DP03_0007E",
+                            "DP03_0014E",
+                            "DP03_0025E",
+                            "DP03_0033E",
                             "DP03_0051E",
                             "DP03_0052E",
                             "DP03_0053E",
@@ -227,9 +236,17 @@ class FoodDeseart(cleanData):
                         ],
                         year=_year,
                     )
-                    tmp = tmp.rename(
+                    df = df.rename(
                         {
                             "dp03_0001e": "total_population",
+                            "dp03_0003e": "total_civilian_force",
+                            "dp03_0004e": "total_labor_force",
+                            "dp03_0005e": "total_unemployed",
+                            "dp03_0006e": "total_armed_forces",
+                            "dp03_0007e": "total_not_labor",
+                            "dp03_0014e": "total_own_children",
+                            "dp03_0025e": "mean_travel_time",
+                            "dp03_0033e": "agr_fish_employment",
                             "dp03_0051e": "total_house",
                             "dp03_0052e": "inc_less_10k",
                             "dp03_0053e": "inc_10k_15k",
@@ -243,11 +260,13 @@ class FoodDeseart(cleanData):
                             "dp03_0061e": "inc_more_200k",
                         }
                     )
-                    tmp = tmp.rename({"zip code tabulation area": "zipcode"}).drop(
+                    df = df.rename({"zip code tabulation area": "zipcode"}).drop(
                         ["state"]
                     )
-                    tmp = tmp.with_columns(pl.all().exclude("zipcode").cast(pl.Int64))
-                    self.conn.sql("INSERT INTO 'DP03Table' BY NAME SELECT * FROM tmp")
+                    df = df.with_columns(
+                        pl.all().exclude("zipcode", "mean_travel_time").cast(pl.Int64)
+                    )
+                    self.conn.sql("INSERT INTO 'DP03Table' BY NAME SELECT * FROM df")
                     logging.info(f"succesfully inserting {_year}")
                 except:
                     logging.warning(f"The ACS for {_year} is not availabe")
