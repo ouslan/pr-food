@@ -85,13 +85,7 @@ class FoodDeseart(cleanData):
             how="inner",
             validate="1:m",
         )
-        # death_df = self.process_death()
-        # gdf = gdf.merge(
-        #     death_df.to_pandas(),
-        #     on=["zipcode", "qtr", "year"],
-        #     how="inner",
-        #     validate="m:m",
-        # )
+
         gdf = gdf.reset_index(drop=True)
         gdf = gpd.GeoDataFrame(gdf, geometry="geometry")
         gdf["supermarkets_and_others_area"] = gdf["supermarkets_and_others"] / (
@@ -132,6 +126,40 @@ class FoodDeseart(cleanData):
             pl.col("death_i").sum().alias("circulatory_disease"),
         )
         return df
+
+    def make_dataset(self):
+        death_df = self.process_death()
+        gdf = self.food_data()
+
+        dp03_df = self.pull_dp03()
+        dp03_df = dp03_df.with_columns(qtr=4)
+        gdf = gdf.merge(
+            dp03_df.to_pandas(),
+            on=["year", "qtr", "zipcode"],
+            how="left",
+            validate="1:1",
+        )
+        gdf = gdf.sort_values(by=["zipcode", "year", "qtr"]).reset_index(drop=True)
+        columns = [
+            "inc_25k_35k",
+            "inc_35k_50k",
+            "inc_50k_75k",
+            "inc_75k_100k",
+            "inc_100k_150k",
+            "inc_150k_200k",
+            "inc_more_200k",
+        ]
+        for col in columns:
+            gdf[col] = gdf.groupby("zipcode")[col].transform(
+                lambda group: group.interpolate(method="cubic")
+            )
+        gdf = gdf.merge(
+            death_df.to_pandas(),
+            on=["year", "qtr", "zipcode"],
+            how="inner",
+            validate="m:m",
+        )
+        return gdf
 
     def pull_death(self) -> pl.DataFrame:
         if "DeathTable" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
@@ -203,7 +231,7 @@ class FoodDeseart(cleanData):
     def pull_dp03(self) -> pl.DataFrame:
         if "DP03Table" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
             init_dp03_table(self.data_file)
-        for _year in range(2012, datetime.now().year):
+        for _year in range(2012, 2019):
             if (
                 self.conn.sql(f"SELECT * FROM 'DP03Table' WHERE year={_year}")
                 .df()

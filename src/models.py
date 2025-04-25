@@ -33,7 +33,7 @@ def init_dp03_table(db_path: str) -> None:
             total_armed_forces INTEGER,
             total_not_labor INTEGER,
             total_own_children INTEGER,
-            mean_travel_time INTEGER,
+            mean_travel_time FLOAT,
             agr_fish_employment INTEGER,
             total_house INTEGER,
             inc_less_10k INTEGER,
