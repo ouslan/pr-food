@@ -157,9 +157,9 @@ class FoodDeseart(cleanData):
             death_df.to_pandas(),
             on=["year", "qtr", "zipcode"],
             how="inner",
-            validate="m:m",
+            validate="1:1",
         )
-        return gdf
+        return gdf[(gdf["year"] >= 2015) & (gdf["year"] <= 2019)]
 
     def pull_death(self) -> pl.DataFrame:
         if "DeathTable" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
@@ -231,7 +231,7 @@ class FoodDeseart(cleanData):
     def pull_dp03(self) -> pl.DataFrame:
         if "DP03Table" not in self.conn.sql("SHOW TABLES;").df().get("name").tolist():
             init_dp03_table(self.data_file)
-        for _year in range(2012, 2019):
+        for _year in range(2012, 2020):
             if (
                 self.conn.sql(f"SELECT * FROM 'DP03Table' WHERE year={_year}")
                 .df()
