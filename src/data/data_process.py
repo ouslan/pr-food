@@ -133,13 +133,15 @@ class FoodDeseart(cleanData):
     def make_dataset(self):
         death_df = self.process_death()
         gdf = self.food_data()
+        #remove random zipcode that is in  q4 2019
+        gdf = gdf[gdf["zipcode"] != "00636"] 
 
         dp03_df = self.pull_dp03()
         dp03_df = dp03_df.with_columns(qtr=4)
         gdf = gdf.merge(
             dp03_df.to_pandas(),
             on=["year", "qtr", "zipcode"],
-            how="inner",
+            how="left",
             validate="1:1",
         )
         gdf = gdf.sort_values(by=["zipcode", "year", "qtr"]).reset_index(drop=True)
@@ -160,9 +162,13 @@ class FoodDeseart(cleanData):
         gdf = gdf.merge(
             death_df.to_pandas(),
             on=["year", "qtr", "zipcode"],
-            how="inner",
+            how="left",
             validate="1:1",
         )
+        for col in death_df.drop(["year", "zipcode", "qtr"]).columns:
+            gdf[col] = gdf.groupby("zipcode")[col].transform(
+                lambda group: group.interpolate(method="linear")
+            )
 
         gdf["paracites_by_pop"] = gdf["paracites_disease"] / gdf["total_population"]
         gdf["cancer_by_pop"] = gdf["cancer_disease"] / gdf["total_population"]
