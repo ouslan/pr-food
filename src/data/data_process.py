@@ -1,14 +1,17 @@
 import logging
 import os
-from datetime import datetime
-from shapely import wkt
+
 import altair as alt
 import geopandas as gpd
-import polars as pl
+import numpy as np
 import pandas as pd
+import polars as pl
 import requests
+from pysal.lib import weights
+from shapely import wkt
+
 from ..jp_qcew.src.data.data_process import cleanData
-from ..models import init_dp03_table, init_death_table
+from ..models import init_death_table, init_dp03_table
 
 
 class FoodDeseart(cleanData):
@@ -141,6 +144,7 @@ class FoodDeseart(cleanData):
         )
         gdf = gdf.sort_values(by=["zipcode", "year", "qtr"]).reset_index(drop=True)
         columns = [
+            "total_population",
             "inc_25k_35k",
             "inc_35k_50k",
             "inc_50k_75k",
@@ -159,6 +163,48 @@ class FoodDeseart(cleanData):
             how="inner",
             validate="1:1",
         )
+
+        gdf["paracites_by_pop"] = gdf["paracites_disease"] / gdf["total_population"]
+        gdf["cancer_by_pop"] = gdf["cancer_disease"] / gdf["total_population"]
+        gdf["nervous_by_pop"] = gdf["nervous_disease"] / gdf["total_population"]
+        gdf["respiratory_by_pop"] = gdf["respiratory_disease"] / gdf["total_population"]
+        gdf["circulatory_by_pop"] = gdf["circulatory_disease"] / gdf["total_population"]
+
+        gdf = gdf.sort_values(by=["year", "qtr", "zipcode"]).reset_index(drop=True)
+        w = weights.Queen.from_dataframe(gdf[(gdf["year"] == 2017) & (gdf["qtr"] == 1)])
+        spatial_lag_results = []
+        for year in range(2015, 2020):
+            for qtr in range(1, 5):
+                group_df = gdf[(gdf["year"] == year) & (gdf["qtr"] == qtr)].reset_index(
+                    drop=True
+                )
+                spatial_paracites = self.calculate_spatial_lag(
+                    group_df, w, "paracites_by_pop"
+                )
+                spatial_cancer = self.calculate_spatial_lag(
+                    group_df, w, "cancer_by_pop"
+                )
+                spatial_nervouse = self.calculate_spatial_lag(
+                    group_df, w, "nervous_by_pop"
+                )
+                spatial_respiratory = self.calculate_spatial_lag(
+                    group_df, w, "respiratory_by_pop"
+                )
+                spatial_circulatory = self.calculate_spatial_lag(
+                    group_df, w, "circulatory_by_pop"
+                )
+
+                # Add the spatial lag results back to the group dataframe
+                group_df["w_paracites"] = spatial_paracites.flatten()
+                group_df["w_cancer"] = spatial_cancer.flatten()
+                group_df["w_nervouse"] = spatial_nervouse.flatten()
+                group_df["w_respiratory"] = spatial_respiratory.flatten()
+                group_df["w_circulatory"] = spatial_circulatory.flatten()
+
+                # Append the group to the results list
+                spatial_lag_results.append(group_df)
+        gdf = pd.concat(spatial_lag_results)
+
         return gdf[(gdf["year"] >= 2015) & (gdf["year"] <= 2019)]
 
     def pull_death(self) -> pl.DataFrame:
@@ -337,3 +383,12 @@ class FoodDeseart(cleanData):
             .properties(width="container", height=300)
         )
         return choropleth
+
+    def calculate_spatial_lag(self, df, w, column) -> np.ndarray:
+        # Reshape y to match the number of rows in the dataframe
+        y = df[column].values.reshape(-1, 1)
+
+        # Apply spatial lag
+        spatial_lag = weights.lag_spatial(w, y)
+
+        return spatial_lag
