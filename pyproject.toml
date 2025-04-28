@@ -25,5 +25,6 @@ dependencies = [
 dev = [
     "jupyter>=1.1.1",
     "matplotlib>=3.10.1",
+    "pre-commit>=4.2.0",
     "pynvim>=0.5.2",
 ]

@@ -139,7 +139,7 @@ class FoodDeseart(cleanData):
         gdf = gdf.merge(
             dp03_df.to_pandas(),
             on=["year", "qtr", "zipcode"],
-            how="left",
+            how="inner",
             validate="1:1",
         )
         gdf = gdf.sort_values(by=["zipcode", "year", "qtr"]).reset_index(drop=True)
@@ -193,13 +193,44 @@ class FoodDeseart(cleanData):
                 spatial_circulatory = self.calculate_spatial_lag(
                     group_df, w, "circulatory_by_pop"
                 )
-
+                spatial_supermarkets_and_others_area = self.calculate_spatial_lag(
+                    group_df, w, "supermarkets_and_others_area"
+                )
+                spatial_supermarkets_area = self.calculate_spatial_lag(
+                    group_df, w, "supermarkets_area"
+                )
+                spatial_convenience_retailers_area = self.calculate_spatial_lag(
+                    group_df, w, "convenience_retailers_area"
+                )
+                spatial_whole_foods_area = self.calculate_spatial_lag(
+                    group_df, w, "whole_foods_area"
+                )
+                spatial_total_food_area = self.calculate_spatial_lag(
+                    group_df, w, "total_food_area"
+                )
+                spatial_construction_area = self.calculate_spatial_lag(
+                    group_df, w, "construction_area"
+                )
+                spatial_finance_area = self.calculate_spatial_lag(
+                    group_df, w, "finance_area"
+                )
                 # Add the spatial lag results back to the group dataframe
                 group_df["w_paracites"] = spatial_paracites.flatten()
                 group_df["w_cancer"] = spatial_cancer.flatten()
                 group_df["w_nervouse"] = spatial_nervouse.flatten()
                 group_df["w_respiratory"] = spatial_respiratory.flatten()
                 group_df["w_circulatory"] = spatial_circulatory.flatten()
+                group_df["w_supermarkets_and_others_area"] = (
+                    spatial_supermarkets_and_others_area.flatten()
+                )
+                group_df["w_supermarkets_area"] = spatial_supermarkets_area.flatten()
+                group_df["w_convenience_retailers_area"] = (
+                    spatial_convenience_retailers_area.flatten()
+                )
+                group_df["w_whole_foods_area"] = spatial_whole_foods_area.flatten()
+                group_df["w_total_food_area"] = spatial_total_food_area.flatten()
+                group_df["w_construction_area"] = spatial_construction_area.flatten()
+                group_df["w_finance_area"] = spatial_finance_area.flatten()
 
                 # Append the group to the results list
                 spatial_lag_results.append(group_df)
